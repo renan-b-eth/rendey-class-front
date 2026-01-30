@@ -26,11 +26,11 @@ export type AgentRun = {
   createdAt: number;
 };
 
-type LessonUpsertInput =
+export type LessonUpsertInput =
   Omit<Lesson, "createdAt" | "updatedAt"> &
   Partial<Pick<Lesson, "createdAt" | "updatedAt">>;
 
-type AppState = {
+export type AppState = {
   // lessons
   lessons: Lesson[];
 
@@ -41,10 +41,15 @@ type AppState = {
 
   // writers
   upsertLesson: (data: LessonUpsertInput) => Lesson;
-  addLesson: (data: LessonUpsertInput) => Lesson;          // compat (agents/page.tsx)
+  addLesson: (data: LessonUpsertInput) => Lesson; // compat (agents/page.tsx)
   updateLesson: (id: string, patch: Partial<Lesson>) => Lesson | undefined; // compat
-  setLessons: (lessons: Lesson[]) => void;                 // compat
+  setLessons: (lessons: Lesson[]) => void; // compat
   removeLesson: (id: string) => void;
+
+  // aliases (compat total)
+  deleteLesson: (id: string) => void; // pages/lessons/[id]
+  seedIfEmpty: () => void; // dashboard/page.tsx e lessons/[id]
+
   clearLessons: () => void;
 
   // agents
@@ -75,10 +80,34 @@ function normalizeLesson(input: LessonUpsertInput, existing?: Lesson): Lesson {
     topic: (input.topic ?? existing?.topic ?? "").trim(),
     objectives: (input.objectives ?? existing?.objectives ?? "").trim(),
     contentMd: (input.contentMd ?? existing?.contentMd ?? "").trim(),
-    tags: Array.isArray(input.tags) ? input.tags : (existing?.tags ?? []),
+    tags: Array.isArray(input.tags) ? input.tags : existing?.tags ?? [],
     createdAt,
     updatedAt: input.updatedAt ?? now,
   };
+}
+
+function seedLessons(): Lesson[] {
+  const now = Date.now();
+  const mk = (n: number, title: string, subject: string, grade: string): Lesson => ({
+    id: `seed_${n}_${now}`,
+    title,
+    subject,
+    grade,
+    durationMin: 50,
+    topic: "Getting started",
+    objectives: "- Objective 1\n- Objective 2\n- Objective 3",
+    contentMd:
+      "## Warm-up (5 min)\n...\n\n## Teaching (15 min)\n...\n\n## Practice (20 min)\n...\n\n## Exit ticket (10 min)\n...",
+    tags: ["day1", "template"],
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return [
+    mk(1, "Fractions — Introduction", "Math", "6th grade"),
+    mk(2, "Reading Comprehension — Short Text", "Portuguese", "7th grade"),
+    mk(3, "Ecosystems — Food Chains", "Science", "8th grade"),
+  ];
 }
 
 export const useAppStore = create<AppState>()(
@@ -112,9 +141,7 @@ export const useAppStore = create<AppState>()(
       },
 
       // compat: alguns lugares chamam addLesson
-      addLesson: (data) => {
-        return get().upsertLesson(data);
-      },
+      addLesson: (data) => get().upsertLesson(data),
 
       // compat: alguns lugares chamam updateLesson(id, patch)
       updateLesson: (id, patch) => {
@@ -149,6 +176,16 @@ export const useAppStore = create<AppState>()(
           lastOpenedLessonId: state.lastOpenedLessonId === id ? undefined : state.lastOpenedLessonId,
         })),
 
+      // alias compat total
+      deleteLesson: (id) => get().removeLesson(id),
+
+      // seed compat total
+      seedIfEmpty: () => {
+        const current = get().lessons;
+        if (Array.isArray(current) && current.length > 0) return;
+        set({ lessons: seedLessons() });
+      },
+
       clearLessons: () => set({ lessons: [], lastOpenedLessonId: undefined }),
 
       // ---------------- AGENTS ----------------
@@ -171,7 +208,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "rendey-class-front-store",
-      version: 2,
+      version: 3,
       partialize: (state) => ({
         lessons: state.lessons,
         agentRuns: state.agentRuns,
