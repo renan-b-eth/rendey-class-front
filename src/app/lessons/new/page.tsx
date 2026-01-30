@@ -5,6 +5,13 @@ import { AppShell } from "@/components/layout/AppShell";
 import { LessonForm } from "@/components/editor/LessonForm";
 import { useAppStore } from "@/lib/store";
 
+function newId() {
+  return (
+    (globalThis.crypto?.randomUUID?.() as string | undefined) ??
+    `lesson_${Math.random().toString(16).slice(2)}_${Date.now()}`
+  );
+}
+
 export default function NewLessonPage() {
   const router = useRouter();
   const addLesson = useAppStore((s) => s.addLesson);
@@ -20,8 +27,8 @@ export default function NewLessonPage() {
         <LessonForm
           primaryLabel="Create lesson"
           onSave={(data) => {
-            const id = addLesson(data);
-            router.push(`/lessons/${id}`);
+            const created = addLesson({ id: newId(), ...data });
+            router.push(`/lessons/${created.id}`);
           }}
         />
       </div>
