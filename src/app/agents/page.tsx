@@ -8,6 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppStore } from "@/lib/store";
 
+const newId = () =>
+  (globalThis.crypto?.randomUUID?.() as string | undefined) ??
+  `l_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+
+
 function mockAgent(prompt: string) {
   return `## Generated Lesson (Mock)
 **Prompt:** ${prompt}
@@ -88,6 +93,7 @@ export default function AgentsPage() {
                   onClick={() => {
                     if (!result) return;
                     addLesson({
+                      id: newId(),
                       title: title.trim() || "AI Lesson",
                       subject: subject.trim() || "General",
                       grade: grade.trim() || "General",
