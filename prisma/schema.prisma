@@ -1,0 +1,52 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["public", "auth"]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String?
+  email        String   @unique
+  passwordHash String
+  credits      Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  creditTx  CreditTransaction[]
+  agentRuns AgentRun[]
+
+  @@schema("public")
+}
+
+model CreditTransaction {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  delta         Int
+  reason        String
+  stripeEventId String?  @unique
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@schema("public")
+}
+
+model AgentRun {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent       String
+  input       String
+  output      String
+  creditsUsed Int
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@schema("public")
+}

@@ -6,17 +6,28 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
   },
   "dependencies": {
+    "@prisma/client": "^5.9.1",
     "@react-pdf/renderer": "^3.4.5",
+    "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
+    "formidable": "^3.5.1",
     "next": "14.2.15",
+    "next-auth": "^4.24.13",
+    "prisma": "^5.9.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "stripe": "^14.21.0",
+    "xlsx": "^0.18.5",
+    "zod": "^3.23.8",
     "zustand": "^4.5.4"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
