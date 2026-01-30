@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { z } from "zod";
 
 const CreateSchema = z.object({
   name: z.string().min(2),
-  discipline: z.string().min(2),
-  schoolName: z.string().min(2),
-  teacherName: z.string().min(2),
+  schoolName: z.string().optional(),
+  discipline: z.string().optional(),
+  teacherName: z.string().optional(),
 });
 
 export async function GET() {
@@ -17,12 +17,19 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const classrooms = await prisma.classroom.findMany({
-    where: { userId: session.user.id },
+  const items = await prisma.classroom.findMany({
+    where: {
+      user: { id: session.user.id }, // ✅ usa relation, não userId
+    },
     orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      createdAt: true,
+    },
   });
 
-  return NextResponse.json(classrooms);
+  return NextResponse.json(items);
 }
 
 export async function POST(req: Request) {
@@ -31,19 +38,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const parsed = CreateSchema.safeParse(body);
-
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error }, { status: 400 });
+    return NextResponse.json(
+      { error: parsed.error.flatten() },
+      { status: 400 }
+    );
   }
 
   const classroom = await prisma.classroom.create({
     data: {
       ...parsed.data,
-      userId: session.user.id,
+      // ✅ CORREÇÃO: conecta o usuário pelo relation
+      user: { connect: { id: session.user.id } },
     },
+    select: { id: true, name: true, createdAt: true },
   });
 
-  return NextResponse.json(classroom);
+  return NextResponse.json(classroom, { status: 201 });
 }
