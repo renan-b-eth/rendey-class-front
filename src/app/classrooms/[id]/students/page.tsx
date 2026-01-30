@@ -1,46 +1,54 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useParams } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
-type Classroom = {
-  id: string;
-  name: string;
-  discipline: string;
-  schoolName: string;
-};
+export default function ClassroomStudentsPage() {
+  const { id } = useParams();
+  const [students, setStudents] = useState<any[]>([]);
+  const [name, setName] = useState("");
 
-export default function ClassroomsPage() {
-  const [data, setData] = useState<Classroom[]>([]);
+  function load() {
+    fetch(`/api/students?classroomId=${id}`)
+      .then(r => r.json())
+      .then(setStudents);
+  }
 
-  useEffect(() => {
-    fetch("/api/classrooms")
-      .then((r) => r.json())
-      .then(setData);
-  }, []);
+  useEffect(load, []);
+
+  async function add() {
+    await fetch("/api/students", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, classroomId: id }),
+    });
+    setName("");
+    load();
+  }
 
   return (
     <AppShell>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Turmas</h1>
-        <Link href="/classrooms/new">
-          <Button>Criar turma</Button>
-        </Link>
+      <h1 className="text-2xl font-bold mb-4">Alunos</h1>
+
+      <div className="flex gap-2 mb-4 max-w-md">
+        <Input
+          placeholder="Nome do aluno"
+          value={name}
+          onChange={e => setName(e.target.value)}
+        />
+        <Button onClick={add}>Adicionar</Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {data.map((c) => (
-          <Card key={c.id}>
-            <CardHeader className="font-semibold">{c.name}</CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              {c.discipline} • {c.schoolName}
-            </CardContent>
-          </Card>
+      <ul className="space-y-2">
+        {students.map(s => (
+          <li key={s.id} className="border p-3 rounded">
+            {s.name}
+          </li>
         ))}
-      </div>
+      </ul>
     </AppShell>
   );
 }
