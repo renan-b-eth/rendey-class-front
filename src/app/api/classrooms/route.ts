@@ -5,10 +5,35 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const CreateSchema = z.object({
-  classroomId: z.string().min(1),
   name: z.string().min(2),
-  externalId: z.string().optional(),
+  schoolName: z.string().optional(),
+  subject: z.string().optional(),
+  grade: z.string().optional(),
 });
+
+export async function GET() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  const items = await prisma.classroom.findMany({
+    where: { userId: session.user.id },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      schoolName: true,
+      subject: true,
+      grade: true,
+      createdAt: true,
+      updatedAt: true,
+      _count: { select: { students: true } },
+    },
+  });
+
+  return NextResponse.json(items);
+}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -25,30 +50,27 @@ export async function POST(req: Request) {
     );
   }
 
-  const { classroomId, name, externalId } = parsed.data;
+  const { name, schoolName, subject, grade } = parsed.data;
 
-  // ✅ segurança: garante que a turma é do usuário logado
-  const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, userId: session.user.id },
-    select: { id: true },
-  });
-  if (!classroom) {
-    return NextResponse.json({ ok: false, error: "Turma inválida" }, { status: 404 });
-  }
-
-  const student = await prisma.student.create({
+  // ✅ NÃO usa `user: { connect }` (no seu Prisma input não existe)
+  const classroom = await prisma.classroom.create({
     data: {
+      userId: session.user.id,
       name,
-      externalId: externalId ?? null,
-
-      // ✅ em vez de classroomId direto:
-      classroom: { connect: { id: classroomId } },
-
-      // ✅ se o seu schema tiver userId opcional no Student (tem no que você colou)
-      user: { connect: { id: session.user.id } },
+      schoolName: schoolName ?? null,
+      subject: subject ?? null,
+      grade: grade ?? null,
     },
-    select: { id: true, name: true, classroomId: true, createdAt: true },
+    select: {
+      id: true,
+      name: true,
+      schoolName: true,
+      subject: true,
+      grade: true,
+      createdAt: true,
+      updatedAt: true,
+    },
   });
 
-  return NextResponse.json(student, { status: 201 });
+  return NextResponse.json(classroom, { status: 201 });
 }
