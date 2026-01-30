@@ -5,30 +5,34 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const CreateSchema = z.object({
+  classroomId: z.string().min(5),
   name: z.string().min(2),
-  schoolName: z.string().optional(),
-  subject: z.string().optional(),
-  grade: z.string().optional(),
+  externalId: z.string().optional(),
 });
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const items = await prisma.classroom.findMany({
-    where: { userId: session.user.id },
+  const { searchParams } = new URL(req.url);
+  const classroomId = searchParams.get("classroomId") ?? undefined;
+
+  // Se vier classroomId, lista só daquela turma.
+  // Caso não venha, lista todos os alunos das turmas do usuário.
+  const items = await prisma.student.findMany({
+    where: classroomId
+      ? { classroomId, classroom: { userId: session.user.id } }
+      : { classroom: { userId: session.user.id } },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
       name: true,
-      schoolName: true,
-      subject: true,
-      grade: true,
+      externalId: true,
+      classroomId: true,
       createdAt: true,
-      updatedAt: true,
-      _count: { select: { students: true } },
+      classroom: { select: { name: true } },
     },
   });
 
@@ -50,27 +54,38 @@ export async function POST(req: Request) {
     );
   }
 
-  const { name, schoolName, subject, grade } = parsed.data;
+  const { classroomId, name, externalId } = parsed.data;
 
-  // ✅ NÃO usa `user: { connect }` (no seu Prisma input não existe)
-  const classroom = await prisma.classroom.create({
+  // ✅ segurança: garante que a turma é do usuário logado
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, userId: session.user.id },
+    select: { id: true },
+  });
+
+  if (!classroom) {
+    return NextResponse.json(
+      { ok: false, error: "Turma não encontrada ou sem permissão." },
+      { status: 404 }
+    );
+  }
+
+  // ✅ CRIA usando relation connect (NÃO usa classroomId direto)
+  const student = await prisma.student.create({
     data: {
-      userId: session.user.id,
       name,
-      schoolName: schoolName ?? null,
-      subject: subject ?? null,
-      grade: grade ?? null,
+      externalId: externalId ?? null,
+      classroom: { connect: { id: classroomId } },
+      // opcional: se quiser “dono” no student também:
+      // user: { connect: { id: session.user.id } },  // só se existir no seu CreateInput
     },
     select: {
       id: true,
       name: true,
-      schoolName: true,
-      subject: true,
-      grade: true,
+      externalId: true,
+      classroomId: true,
       createdAt: true,
-      updatedAt: true,
     },
   });
 
-  return NextResponse.json(classroom, { status: 201 });
+  return NextResponse.json(student, { status: 201 });
 }
