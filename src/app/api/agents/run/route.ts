@@ -6,127 +6,144 @@ import { prisma } from "@/lib/prisma";
 import { mustGetEnv } from "@/lib/env";
 
 const Schema = z.object({
-  agent: z.enum(["quiz", "prova", "rubrica", "feedback"]),
+  agent: z.string().min(2),
+  engine: z.enum(["FOUNDRY", "NVIDIA"]).default("FOUNDRY"),
   prompt: z.string().min(5),
-  engine: z.enum(["foundry", "nvidia"]).default("foundry"),
+  use_context: z.enum(["none", "classroom", "student", "both"]).default("none"),
+  classroomId: z.string().optional(),
+  studentId: z.string().optional(),
+  temperature: z.number().min(0).max(1).optional(),
 });
 
-const COST: Record<string, number> = {
-  quiz: 2,
-  prova: 4,
-  rubrica: 2,
-  feedback: 2,
-};
+async function buildContext({
+  use_context,
+  classroomId,
+  studentId,
+}: {
+  use_context: "none" | "classroom" | "student" | "both";
+  classroomId?: string;
+  studentId?: string;
+}) {
+  const take = 12;
 
-async function callFoundry(prompt: string) {
-  const base = mustGetEnv("FOUNDRY_API_BASE_URL");
-  const key = mustGetEnv("FOUNDRY_API_KEY");
-  const model = process.env.FOUNDRY_MODEL ?? "gpt-4o-mini";
+  let classroom_context = "";
+  let student_context = "";
 
-  const res = await fetch(`${base}/v1/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: "Você é um assistente pedagógico para professores da rede pública brasileira. Responda em pt-BR, com formato pronto para sala de aula." },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.4,
-    }),
-  });
+  if ((use_context === "classroom" || use_context === "both") && classroomId) {
+    const items = await prisma.knowledgeItem.findMany({
+      where: { classroomId },
+      orderBy: { createdAt: "desc" },
+      take,
+      select: { title: true, content: true, createdAt: true },
+    });
 
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`Foundry API error: ${res.status} ${t}`);
+    classroom_context = items
+      .reverse()
+      .map(
+        (i) =>
+          `### ${i.title} (${new Date(i.createdAt).toLocaleDateString("pt-BR")})\n${i.content}`
+      )
+      .join("\n\n");
   }
 
-  const j: any = await res.json();
-  const out = j?.choices?.[0]?.message?.content ?? "";
-  return String(out).trim();
-}
+  if ((use_context === "student" || use_context === "both") && studentId) {
+    const items = await prisma.knowledgeItem.findMany({
+      where: { studentId },
+      orderBy: { createdAt: "desc" },
+      take,
+      select: { title: true, content: true, createdAt: true },
+    });
 
-async function callNvidia(prompt: string) {
-  const base = mustGetEnv("NVIDIA_API_BASE_URL");
-  const key = mustGetEnv("NVIDIA_API_KEY");
-  const model = process.env.NVIDIA_MODEL ?? "meta/llama-3.1-70b-instruct";
-
-  const res = await fetch(`${base}/v1/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: "Você é um assistente pedagógico para professores da rede pública brasileira. Responda em pt-BR, com formato pronto para sala de aula." },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.4,
-    }),
-  });
-
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`NVIDIA API error: ${res.status} ${t}`);
+    student_context = items
+      .reverse()
+      .map(
+        (i) =>
+          `### ${i.title} (${new Date(i.createdAt).toLocaleDateString("pt-BR")})\n${i.content}`
+      )
+      .join("\n\n");
   }
 
-  const j: any = await res.json();
-  const out = j?.choices?.[0]?.message?.content ?? "";
-  return String(out).trim();
+  return { classroom_context, student_context };
 }
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user?.id) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
 
-  const body = await req.json().catch(() => null);
+  const body = await req.json().catch(() => ({}));
   const parsed = Schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
-
-  const { agent, prompt, engine } = parsed.data;
-  const cost = COST[agent] ?? 2;
-
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { credits: true } });
-  if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
-  if (user.credits < cost) {
-    return NextResponse.json({ error: "Créditos insuficientes. Compre mais créditos para continuar." }, { status: 402 });
+  if (!parsed.success) {
+    return NextResponse.json(
+      { ok: false, error: parsed.error.flatten() },
+      { status: 400 }
+    );
   }
 
-  let output = "";
-  try {
-    output = engine === "nvidia" ? await callNvidia(prompt) : await callFoundry(prompt);
-  } catch (e: any) {
-    // don't charge if model call fails
-    return NextResponse.json({ error: e?.message ?? "Falha ao executar agente." }, { status: 502 });
-  }
+  const { agent, engine, prompt, use_context, classroomId, studentId, temperature } =
+    parsed.data;
 
-  await prisma.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: session.user.id },
-      data: { credits: { decrement: cost } },
-    });
-    await tx.creditTransaction.create({
-      data: {
-        userId: session.user.id,
-        delta: -cost,
-        reason: `Uso de agente • ${agent}`,
-      },
-    });
-    await tx.agentRun.create({
-      data: {
-        userId: session.user.id,
-        agent,
-        input: prompt,
-        output,
-        creditsUsed: cost,
-      },
-    });
+  const { classroom_context, student_context } = await buildContext({
+    use_context,
+    classroomId,
+    studentId,
   });
 
-  return NextResponse.json({ output, creditsUsed: cost });
+  const BACKEND_API_BASE_URL = mustGetEnv("BACKEND_API_BASE_URL");
+
+  const r = await fetch(`${BACKEND_API_BASE_URL}/api/v1/agents/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent,
+      engine,
+      prompt,
+      use_context,
+      classroom_context: classroom_context || undefined,
+      student_context: student_context || undefined,
+      temperature: temperature ?? 0.7,
+    }),
+  });
+
+  const json = await r.json().catch(() => null);
+  if (!r.ok || !json?.ok) {
+    return NextResponse.json(
+      { ok: false, error: json?.error ?? "Backend error", raw: json },
+      { status: 500 }
+    );
+  }
+
+  const output = json.output ?? "";
+
+  await prisma.agentRun.create({
+    data: {
+      userId: session.user.id,
+      agent,
+      input: prompt,
+      output,
+      creditsUsed: 0,
+      classroomId: classroomId ?? null,
+      studentId: studentId ?? null,
+    },
+  });
+
+  if (classroomId || studentId) {
+    await prisma.knowledgeItem.create({
+      data: {
+        userId: session.user.id,
+        title: `${agent.toUpperCase()} - conteúdo gerado`,
+        content: output,
+        source: "agent",
+        classroomId: classroomId ?? null,
+        studentId: studentId ?? null,
+      },
+    });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    engineUsed: json.engineUsed ?? engine,
+    output,
+  });
 }

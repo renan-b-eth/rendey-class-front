@@ -9,14 +9,42 @@ datasource db {
   schemas  = ["public", "auth"]
 }
 
+model Upload {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  classroomId String?
+  classroom   Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+
+  studentId String?
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  fileName String
+  fileUrl  String
+  mimeType String?
+  size     BigInt?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([classroomId])
+  @@index([studentId])
+  @@schema("public")
+}
+
 model User {
-  id           String   @id @default(cuid())
+  id           String          @id @default(cuid())
   name         String?
-  email        String   @unique
+  email        String          @unique
   passwordHash String
-  credits      Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  credits      Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  classrooms   Classroom[]
+  students     Student[]
+  knowledge    KnowledgeItem[]
+  uploads      Upload[]
 
   creditTx  CreditTransaction[]
   agentRuns AgentRun[]
@@ -38,15 +66,91 @@ model CreditTransaction {
 }
 
 model AgentRun {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   agent       String
   input       String
   output      String
   creditsUsed Int
   createdAt   DateTime @default(now())
 
+  classroomId String?
+  classroom   Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+
+  studentId String?
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
   @@index([userId])
+  @@index([classroomId])
+  @@index([studentId])
+  @@schema("public")
+}
+
+model Classroom {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name       String
+  schoolName String?
+  subject    String?
+  grade      String?
+
+  students  Student[]
+  knowledge KnowledgeItem[]
+  uploads   Upload[]
+  runs      AgentRun[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@schema("public")
+}
+
+model Student {
+  id          String    @id @default(cuid())
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  name       String
+  externalId String?
+
+  knowledge KnowledgeItem[]
+  uploads   Upload[]
+  runs      AgentRun[]
+
+  createdAt DateTime @default(now())
+  User      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+
+  @@index([classroomId])
+  @@schema("public")
+}
+
+model KnowledgeItem {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  classroomId String?
+  classroom   Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+
+  studentId String?
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  title    String
+  content  String
+  source   String
+  fileUrl  String?
+  mimeType String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([classroomId])
+  @@index([studentId])
   @@schema("public")
 }
