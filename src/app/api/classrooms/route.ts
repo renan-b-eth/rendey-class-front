@@ -5,26 +5,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const CreateSchema = z.object({
+  classroomId: z.string().min(1),
   name: z.string().min(2),
-  schoolName: z.string().optional(),
-  subject: z.string().optional(),
-  grade: z.string().optional(),
+  externalId: z.string().optional(),
 });
-
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
-
-  const items = await prisma.classroom.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, createdAt: true },
-  });
-
-  return NextResponse.json(items);
-}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -41,19 +25,30 @@ export async function POST(req: Request) {
     );
   }
 
-  const classroom = await prisma.classroom.create({
-    data: {
-      // ✅ campos corretos do seu Prisma
-      name: parsed.data.name,
-      schoolName: parsed.data.schoolName ?? null,
-      subject: parsed.data.subject ?? null,
-      grade: parsed.data.grade ?? null,
+  const { classroomId, name, externalId } = parsed.data;
 
-      // ✅ vínculo com usuário (no seu schema, userId existe e é obrigatório)
-      userId: session.user.id,
+  // ✅ segurança: garante que a turma é do usuário logado
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: classroomId, userId: session.user.id },
+    select: { id: true },
+  });
+  if (!classroom) {
+    return NextResponse.json({ ok: false, error: "Turma inválida" }, { status: 404 });
+  }
+
+  const student = await prisma.student.create({
+    data: {
+      name,
+      externalId: externalId ?? null,
+
+      // ✅ em vez de classroomId direto:
+      classroom: { connect: { id: classroomId } },
+
+      // ✅ se o seu schema tiver userId opcional no Student (tem no que você colou)
+      user: { connect: { id: session.user.id } },
     },
-    select: { id: true, name: true, createdAt: true },
+    select: { id: true, name: true, classroomId: true, createdAt: true },
   });
 
-  return NextResponse.json(classroom, { status: 201 });
+  return NextResponse.json(student, { status: 201 });
 }
