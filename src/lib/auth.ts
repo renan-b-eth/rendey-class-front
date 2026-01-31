@@ -29,7 +29,10 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token }) {
+    async jwt({ token, user }) {
+       // quando faz login, o `user` existe
+      if (user?.id) token.id = user.id;
+    
       if (!token?.sub) return token;
       // attach credits on each request (lightweight)
       const u = await prisma.user.findUnique({
@@ -44,6 +47,10 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
+      if (session.user) {
+        (session.user as any).id = (token as any).id ?? token.sub;
+      }
+      
       if (session.user && token?.sub) {
         session.user.id = token.sub;
         session.user.credits = (token as any).credits ?? 0;

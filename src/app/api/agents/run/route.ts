@@ -6,10 +6,9 @@ import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
-function requiredEnv(name: string) {
+function optionalEnv(name: string) {
   const v = (process.env[name] || "").trim();
-  if (!v) throw new Error(`Missing env: ${name}`);
-  return v.replace(/\/$/, "");
+  return v ? v.replace(/\/$/, "") : "";
 }
 
 const BodySchema = z.object({
@@ -100,7 +99,10 @@ export async function POST(req: Request) {
 
     const { agent, engine, prompt, use_context, classroomId, studentId, temperature } = parsed.data;
 
-    const base = requiredEnv("AGENTS_API_BASE_URL");
+    const base = optionalEnv("AGENTS_API_BASE_URL");
+    if (!base) {
+      return NextResponse.json({ ok: false, error: "AGENTS_API_BASE_URL not configured" }, { status: 500 });
+    }
     const url = `${base}/api/v1/agents/run`;
 
     const { classroom_context, student_context } = await buildContexts(
