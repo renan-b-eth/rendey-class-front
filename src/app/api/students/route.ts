@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
   const { classroomId, name, externalId } = parsed.data;
 
-  // ✅ segurança: garante que a turma é do dono logado
+  // ✅ garante que a turma é do usuário logado
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, userId: session.user.id },
     select: { id: true },
@@ -67,15 +67,12 @@ export async function POST(req: Request) {
     );
   }
 
-  // ✅ cria aluno usando relation connect (evita classroomId: never)
+  // ✅ cria aluno conectando SOMENTE à turma (sem user connect)
   const student = await prisma.student.create({
     data: {
-      name,
+      name: name.trim(),
       externalId: externalId?.trim() ? externalId.trim() : null,
       classroom: { connect: { id: classroomId } },
-
-      // ✅ como no seu schema o Student tem userId opcional, isso funciona:
-      user: { connect: { id: session.user.id } },
     },
     select: {
       id: true,
