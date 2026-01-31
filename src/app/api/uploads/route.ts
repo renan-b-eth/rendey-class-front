@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 const MAX_MB = 25;
 const MAX_BYTES = MAX_MB * 1024 * 1024;
 
-// PDF/DOCX/PPTX + imagens (se quiser permitir)
+// PDF/DOCX/PPTX + imagens (opcional)
 const ALLOWED_MIME = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
@@ -22,7 +22,6 @@ const ALLOWED_MIME = new Set([
 ]);
 
 function safeFileName(name: string) {
-  // remove caracteres que podem causar dor de cabeça em key/URL
   return name.replace(/[^\w.\- ()\[\]]+/g, "_").slice(0, 180);
 }
 
@@ -35,7 +34,7 @@ export async function POST(req: Request) {
   const form = await req.formData();
   const file = form.get("file");
 
-  // ids opcionais: use undefined (não null) pra Prisma ficar feliz em todos os casos
+  // ids opcionais: use undefined (não null) pro Prisma
   const classroomIdRaw = form.get("classroomId")?.toString().trim();
   const studentIdRaw = form.get("studentId")?.toString().trim();
   const classroomId = classroomIdRaw ? classroomIdRaw : undefined;
@@ -85,7 +84,7 @@ export async function POST(req: Request) {
   const publicBase = r2PublicBaseUrl();
   const fileUrl = publicBase ? `${publicBase}/${key}` : `r2://${key}`;
 
-  // ✅ Upload metadata (alinha com seu model: filename, fileUrl, key, mimeType, size)
+  // ✅ Upload metadata (alinha 100% com o model Upload do seu Prisma)
   const upload = await prisma.upload.create({
     data: {
       userId: session.user.id,
@@ -93,7 +92,7 @@ export async function POST(req: Request) {
       studentId,
       filename: cleanName,
       key,
-      fileUrl, // ✅ era "url"
+      fileUrl,
       mimeType: contentType,
       size: BigInt(bytes.length),
     },
@@ -111,26 +110,28 @@ export async function POST(req: Request) {
     },
   });
 
-  // KnowledgeItem placeholder
+  // ✅ KnowledgeItem placeholder (alinha 100% com o model KnowledgeItem do seu Prisma)
+  // (sem uploadId, porque não existe no schema)
   const knowledge = await prisma.knowledgeItem.create({
     data: {
       userId: session.user.id,
-      // se você quiser título mais bonitinho (sem uid), use cleanName
+      classroomId,
+      studentId,
       title: cleanName,
       content: "",
       source: "UPLOAD",
-      classroomId,
-      studentId,
-      uploadId: upload.id,
+      fileUrl,
+      mimeType: contentType,
     },
     select: {
       id: true,
       userId: true,
-      title: true,
-      source: true,
       classroomId: true,
       studentId: true,
-      uploadId: true,
+      title: true,
+      source: true,
+      fileUrl: true,
+      mimeType: true,
       createdAt: true,
     },
   });
