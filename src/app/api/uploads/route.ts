@@ -66,7 +66,7 @@ export async function POST(req: Request) {
   }
 
   const arrayBuffer = await file.arrayBuffer();
-  const bytes = Buffer.from(arrayBuffer);
+  const bytes = new Uint8Array(arrayBuffer);
 
   const uid = crypto.randomUUID();
   const cleanName = safeFileName(file.name || "arquivo");
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
       key,
       fileUrl,
       mimeType: contentType,
-      size: BigInt(bytes.length),
+      size: BigInt(bytes.byteLength),
     },
     select: {
       id: true,
@@ -111,7 +111,6 @@ export async function POST(req: Request) {
   });
 
   // ✅ KnowledgeItem placeholder (alinha 100% com o model KnowledgeItem do seu Prisma)
-  // (sem uploadId, porque não existe no schema)
   const knowledge = await prisma.knowledgeItem.create({
     data: {
       userId: session.user.id,
