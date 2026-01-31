@@ -21,7 +21,7 @@ model Upload {
   studentId String?
   student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
-  fileName String
+  filename String
   fileUrl  String
   mimeType String?
   size     BigInt?
