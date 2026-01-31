@@ -18,7 +18,7 @@ export async function GET() {
   }
 
   const items = await prisma.classroom.findMany({
-    where: { user: { id: session.user.id } }, // ✅ usa relation, não userId
+    where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -43,7 +43,6 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const parsed = CreateSchema.safeParse(body);
-
   if (!parsed.success) {
     return NextResponse.json(
       { ok: false, error: parsed.error.flatten() },
@@ -51,10 +50,15 @@ export async function POST(req: Request) {
     );
   }
 
+  const { name, schoolName, subject, grade } = parsed.data;
+
+  // ✅ cria turma conectando o usuário via relation (evita userId: never)
   const classroom = await prisma.classroom.create({
     data: {
-      ...parsed.data,
-      // ✅ conecta o dono corretamente (resolve o "userId: never")
+      name,
+      schoolName: schoolName?.trim() ? schoolName.trim() : null,
+      subject: subject?.trim() ? subject.trim() : null,
+      grade: grade?.trim() ? grade.trim() : null,
       user: { connect: { id: session.user.id } },
     },
     select: {
@@ -64,6 +68,7 @@ export async function POST(req: Request) {
       subject: true,
       grade: true,
       createdAt: true,
+      updatedAt: true,
     },
   });
 

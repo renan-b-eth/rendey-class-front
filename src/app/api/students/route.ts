@@ -19,8 +19,6 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const classroomId = searchParams.get("classroomId") ?? undefined;
 
-  // Se vier classroomId, lista só daquela turma.
-  // Caso não venha, lista todos os alunos das turmas do usuário.
   const items = await prisma.student.findMany({
     where: classroomId
       ? { classroomId, classroom: { userId: session.user.id } }
@@ -32,7 +30,7 @@ export async function GET(req: Request) {
       externalId: true,
       classroomId: true,
       createdAt: true,
-      classroom: { select: { name: true } },
+      classroom: { select: { id: true, name: true } },
     },
   });
 
@@ -56,7 +54,7 @@ export async function POST(req: Request) {
 
   const { classroomId, name, externalId } = parsed.data;
 
-  // ✅ segurança: garante que a turma é do usuário logado
+  // ✅ segurança: garante que a turma é do dono logado
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, userId: session.user.id },
     select: { id: true },
@@ -69,14 +67,15 @@ export async function POST(req: Request) {
     );
   }
 
-  // ✅ CRIA usando relation connect (NÃO usa classroomId direto)
+  // ✅ cria aluno usando relation connect (evita classroomId: never)
   const student = await prisma.student.create({
     data: {
       name,
-      externalId: externalId ?? null,
+      externalId: externalId?.trim() ? externalId.trim() : null,
       classroom: { connect: { id: classroomId } },
-      // opcional: se quiser “dono” no student também:
-      // user: { connect: { id: session.user.id } },  // só se existir no seu CreateInput
+
+      // ✅ como no seu schema o Student tem userId opcional, isso funciona:
+      user: { connect: { id: session.user.id } },
     },
     select: {
       id: true,
