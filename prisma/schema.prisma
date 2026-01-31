@@ -22,7 +22,13 @@ model Upload {
   student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
   filename String
+
+  // ✅ URL pública do arquivo (R2)
   fileUrl  String
+
+  // ✅ chave no bucket (necessária pra deletar/organizar no R2)
+  key      String
+
   mimeType String?
   size     BigInt?
 
