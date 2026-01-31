@@ -4,9 +4,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  schemas  = ["public", "auth"]
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // Usa a porta 6543 (Pooler)
+  directUrl = env("DIRECT_URL")   // Usa a porta 5432 (Direct) - ADICIONE ESSA LINHA
+  schemas   = ["public"]
 }
 
 model Upload {
