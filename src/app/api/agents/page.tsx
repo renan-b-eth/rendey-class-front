@@ -1,22 +1,24 @@
-import { AppShell } from "@/components/layout/AppShell";
+import { NextResponse } from "next/server";
+import { mustGetEnv } from "@/lib/env";
 
-export default function AgentsPage() {
-  return (
-    <AppShell>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Copiloto Pedagógico</h1>
-        <p className="text-muted-foreground mt-2 max-w-2xl">
-          Gere quizzes, provas, relatórios e planos de aula em segundos,
-          utilizando o contexto real da sua turma e de cada aluno.
-        </p>
-      </div>
+export async function GET() {
+  const BACKEND_API_BASE_URL = mustGetEnv("BACKEND_API_BASE_URL");
 
-      <div className="rounded-2xl border p-6 bg-white/5">
-        {/* aqui entra o painel que você já tem */}
-        <p className="text-sm text-muted-foreground">
-          Selecione o agente, a turma e o aluno para começar.
-        </p>
-      </div>
-    </AppShell>
-  );
+  const r = await fetch(`${BACKEND_API_BASE_URL}/api/v1/agents`, {
+    method: "GET",
+    headers: { "content-type": "application/json" },
+    // evita cache chato em deploy
+    cache: "no-store",
+  });
+
+  const json = await r.json().catch(() => null);
+
+  if (!r.ok || !json?.ok) {
+    return NextResponse.json(
+      { ok: false, error: json?.error ?? "Backend error", raw: json },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ ok: true, agents: json.agents ?? [] });
 }
