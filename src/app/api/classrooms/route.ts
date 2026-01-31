@@ -4,6 +4,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
+
 const CreateSchema = z.object({
   name: z.string().min(2),
   schoolName: z.string().optional(),
@@ -52,13 +54,14 @@ export async function POST(req: Request) {
 
   const { name, schoolName, subject, grade } = parsed.data;
 
-  // ✅ cria turma conectando o usuário via relation (evita userId: never)
   const classroom = await prisma.classroom.create({
     data: {
       name,
-      schoolName: schoolName?.trim() ? schoolName.trim() : null,
-      subject: subject?.trim() ? subject.trim() : null,
-      grade: grade?.trim() ? grade.trim() : null,
+      schoolName: schoolName ?? null,
+      subject: subject ?? null,
+      grade: grade ?? null,
+
+      // ✅ conecta o dono pelo relation (evita o "userId: never")
       user: { connect: { id: session.user.id } },
     },
     select: {

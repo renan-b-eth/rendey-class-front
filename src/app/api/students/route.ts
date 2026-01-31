@@ -4,6 +4,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
+
 const CreateSchema = z.object({
   classroomId: z.string().min(5),
   name: z.string().min(2),
@@ -30,7 +32,7 @@ export async function GET(req: Request) {
       externalId: true,
       classroomId: true,
       createdAt: true,
-      classroom: { select: { id: true, name: true } },
+      classroom: { select: { name: true } },
     },
   });
 
@@ -54,7 +56,7 @@ export async function POST(req: Request) {
 
   const { classroomId, name, externalId } = parsed.data;
 
-  // ✅ garante que a turma é do usuário logado
+  // ✅ garante que a turma pertence ao usuário logado
   const classroom = await prisma.classroom.findFirst({
     where: { id: classroomId, userId: session.user.id },
     select: { id: true },
@@ -67,11 +69,10 @@ export async function POST(req: Request) {
     );
   }
 
-  // ✅ cria aluno conectando SOMENTE à turma (sem user connect)
   const student = await prisma.student.create({
     data: {
-      name: name.trim(),
-      externalId: externalId?.trim() ? externalId.trim() : null,
+      name,
+      externalId: externalId ?? null,
       classroom: { connect: { id: classroomId } },
     },
     select: {
