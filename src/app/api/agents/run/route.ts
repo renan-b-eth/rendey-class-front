@@ -1,55 +1,63 @@
 import { NextResponse } from "next/server";
 
-const BASE =
-  process.env.NEXT_PUBLIC_AGENTS_API_BASE?.replace(/\/$/, "") ||
-  process.env.AGENTS_API_BASE?.replace(/\/$/, "");
-
-function err(message: string, status = 500) {
-  return NextResponse.json({ ok: false, error: message }, { status });
-}
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    if (!BASE) return err("Missing env: NEXT_PUBLIC_AGENTS_API_BASE (ou AGENTS_API_BASE)", 500);
+    const base = process.env.AGENTS_API_BASE_URL?.replace(/\/$/, "");
+    if (!base) {
+      return NextResponse.json(
+        { ok: false, error: "Missing env: AGENTS_API_BASE_URL" },
+        { status: 500 }
+      );
+    }
 
-    const body = await req.json().catch(() => null);
-    if (!body?.prompt || !body?.agent) return err("Campos obrigatórios: agent, prompt", 400);
+    const body = await req.json().catch(() => ({}));
 
-    // seu FastAPI aceita: agent, engine, prompt, use_context, classroom_context, student_context...
-    // por enquanto, manda sem contexto (depois a gente liga com KnowledgeItem)
+    // normaliza nomes vindos do seu front
     const payload = {
-      agent: body.agent,
+      agent: body.agent ?? "quiz",
       engine: body.engine ?? "FOUNDRY",
-      prompt: body.prompt,
-      use_context: body.use_context ?? "none",
-      classroom_context: null,
-      student_context: null,
+      prompt: body.prompt ?? "",
+      use_context: body.use_context ?? body.useContext ?? "none",
+      classroom_context: body.classroom_context ?? body.classroomContext ?? null,
+      student_context: body.student_context ?? body.studentContext ?? null,
       temperature: body.temperature ?? 0.7,
     };
 
-    const url = `${BASE}/agents/run`;
-    const r = await fetch(url, {
+    const r = await fetch(`${base}/api/v1/agents/run`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
     });
 
-    const text = await r.text(); // evita json quebrado
-    if (!r.ok) {
-      return err(`Run API error ${r.status}: ${text?.slice(0, 200) || "no body"}`, 502);
-    }
-
+    const text = await r.text();
     let data: any = null;
     try {
       data = text ? JSON.parse(text) : null;
     } catch {
-      data = null;
+      return NextResponse.json(
+        { ok: false, error: `Agents API error ${r.status}: ${text.slice(0, 200)}` },
+        { status: 502 }
+      );
     }
 
-    // FastAPI retorna { ok: true, engineUsed, output }
-    const output = data?.output ?? "";
-    return NextResponse.json({ ok: true, output });
+    if (!r.ok) {
+      return NextResponse.json(
+        { ok: false, error: data?.detail ?? data?.error ?? `Agents API error ${r.status}` },
+        { status: 502 }
+      );
+    }
+
+    // FastAPI response_model: { ok, engineUsed, output }
+    return NextResponse.json(
+      { ok: true, engineUsed: data.engineUsed, output: data.output },
+      { status: 200 }
+    );
   } catch (e: any) {
-    return err(e?.message ?? "Erro ao executar agente", 500);
+    return NextResponse.json(
+      { ok: false, error: e?.message ?? "Unknown error" },
+      { status: 500 }
+    );
   }
 }

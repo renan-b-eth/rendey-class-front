@@ -1,38 +1,48 @@
 import { NextResponse } from "next/server";
 
-const BASE =
-  process.env.NEXT_PUBLIC_AGENTS_API_BASE?.replace(/\/$/, "") ||
-  process.env.AGENTS_API_BASE?.replace(/\/$/, "");
-
-function err(message: string, status = 500) {
-  return NextResponse.json({ ok: false, error: message }, { status });
-}
+export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    if (!BASE) return err("Missing env: NEXT_PUBLIC_AGENTS_API_BASE (ou AGENTS_API_BASE)", 500);
+    const base = process.env.AGENTS_API_BASE_URL?.replace(/\/$/, "");
+    if (!base) {
+      return NextResponse.json(
+        { ok: false, error: "Missing env: AGENTS_API_BASE_URL" },
+        { status: 500 }
+      );
+    }
 
-    // seu FastAPI tem /agents (alias) e /api/v1/agents
-    const url = `${BASE}/agents`;
+    const r = await fetch(`${base}/api/v1/agents`, {
+      method: "GET",
+      headers: { "content-type": "application/json" },
+      cache: "no-store",
+    });
 
-    const r = await fetch(url, { cache: "no-store" });
-    const text = await r.text(); // evita “Unexpected end of JSON input”
+    const text = await r.text();
+    let data: any = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      // backend devolveu HTML ou texto
+      return NextResponse.json(
+        { ok: false, error: `Agents API error ${r.status}: ${text.slice(0, 200)}` },
+        { status: 502 }
+      );
+    }
 
     if (!r.ok) {
-      return err(`Agents API error ${r.status}: ${text?.slice(0, 200) || "no body"}`, 502);
+      return NextResponse.json(
+        { ok: false, error: data?.detail ?? data?.error ?? `Agents API error ${r.status}` },
+        { status: 502 }
+      );
     }
 
-    // /agents retorna lista direto
-    let data: any = [];
-    try {
-      data = text ? JSON.parse(text) : [];
-    } catch {
-      data = [];
-    }
-
-    const agents = Array.isArray(data) ? data : (data?.agents ?? []);
-    return NextResponse.json({ ok: true, agents });
+    // seu FastAPI retorna array direto
+    return NextResponse.json({ ok: true, agents: data }, { status: 200 });
   } catch (e: any) {
-    return err(e?.message ?? "Erro ao carregar agentes", 500);
+    return NextResponse.json(
+      { ok: false, error: e?.message ?? "Unknown error" },
+      { status: 500 }
+    );
   }
 }
