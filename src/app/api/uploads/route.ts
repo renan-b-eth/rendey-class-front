@@ -65,6 +65,7 @@ export async function POST(req: Request) {
     );
   }
 
+  // ✅ bytes em Uint8Array (padrão)
   const arrayBuffer = await file.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
 
@@ -72,6 +73,7 @@ export async function POST(req: Request) {
   const cleanName = safeFileName(file.name || "arquivo");
   const datePrefix = new Date().toISOString().slice(0, 10);
 
+  // ✅ key ANTES de usar
   const key = `${session.user.id}/${datePrefix}/${uid}-${cleanName}`;
 
   // Upload Cloudflare R2
@@ -82,9 +84,9 @@ export async function POST(req: Request) {
   });
 
   const publicBase = r2PublicBaseUrl();
-  const fileUrl = publicBase ? `${publicBase}/${key}` : `r2://${key}`;
+  const fileUrl = publicBase ? `${publicBase}/${encodeKeyPathForUrl(key)}` : `r2://${key}`;
 
-  // ✅ Upload metadata (alinha 100% com o model Upload do seu Prisma)
+  // ✅ Upload metadata (alinha 100% com seu model Upload)
   const upload = await prisma.upload.create({
     data: {
       userId: session.user.id,
@@ -110,7 +112,7 @@ export async function POST(req: Request) {
     },
   });
 
-  // ✅ KnowledgeItem placeholder (alinha 100% com o model KnowledgeItem do seu Prisma)
+  // ✅ KnowledgeItem placeholder (SEU schema NÃO tem uploadId, então não usa)
   const knowledge = await prisma.knowledgeItem.create({
     data: {
       userId: session.user.id,
@@ -135,11 +137,16 @@ export async function POST(req: Request) {
     },
   });
 
-  // ✅ BigInt não serializa em JSON: converte antes de retornar
+  // ✅ BigInt não serializa em JSON
   const uploadJson = {
     ...upload,
     size: upload.size ? upload.size.toString() : null,
   };
 
   return NextResponse.json({ ok: true, upload: uploadJson, knowledge });
+}
+
+// mesma lógica do r2.ts, mas aqui só pra URL pública ficar correta
+function encodeKeyPathForUrl(key: string) {
+  return key.split("/").map(encodeURIComponent).join("/");
 }
